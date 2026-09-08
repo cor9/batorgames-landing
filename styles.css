@@ -158,6 +158,63 @@ h1 {
     border: 1px solid #6a6a6a;
 }
 
+/* External links section */
+.links-section {
+    margin-bottom: 40px;
+}
+
+.links-title {
+    color: #ffffff;
+    font-size: 1.2em;
+    font-weight: 400;
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+}
+
+.links-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 15px;
+}
+
+.link-card {
+    background: linear-gradient(135deg, rgba(42, 42, 42, 0.8) 0%, rgba(14, 67, 84, 0.8) 100%);
+    border: 1px solid rgba(0, 212, 255, 0.2);
+    border-radius: 12px;
+    padding: 18px;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.3s ease;
+}
+
+.link-card:hover {
+    border-color: #00d4ff;
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(0, 212, 255, 0.15);
+}
+
+.link-name {
+    color: #ffffff;
+    font-size: 1.05em;
+    font-weight: 700;
+}
+
+.link-desc {
+    color: #aaaaaa;
+    font-size: 0.8em;
+    line-height: 1.4;
+}
+
+.link-domain {
+    color: #00d4ff;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin-top: 4px;
+}
+
 /* Footer */
 .site-footer {
     color: #5f9ab8;
