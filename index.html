@@ -77,6 +77,19 @@
 
         </main>
 
+        <!-- Live Presence + Room Directory -->
+        <section class="live-section">
+            <div class="live-header">
+                <span class="live-dot"></span>
+                <span id="onlineCount">—</span>&nbsp;bros online now
+            </div>
+            <h2 class="links-title">LIVE ROOMS ON THE HUB</h2>
+            <div id="liveRooms" class="live-rooms">
+                <p class="live-empty" id="liveEmpty">Listening for open rooms…</p>
+            </div>
+            <p class="live-hint">Start any game with no password and it appears here automatically. Locked rooms stay private.</p>
+        </section>
+
         <!-- More Games Around the Web -->
         <section class="links-section">
             <h2 class="links-title">MORE BATOR FUN AROUND THE WEB</h2>
@@ -144,5 +157,9 @@
             <p>batorgames.site &middot; adults only &middot; play hard, edge harder</p>
         </footer>
     </div>
+
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <script src="p2p.js"></script>
+    <script src="landing.js"></script>
 </body>
 </html>
