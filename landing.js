@@ -14,15 +14,32 @@ const GAME_META = {
 
 let hub = null;
 
+function renderOnlineNames(roster) {
+    const wrap = document.getElementById("onlineNames");
+    wrap.innerHTML = "";
+    roster.forEach((p) => {
+        const chip = document.createElement("span");
+        chip.className = "online-chip";
+        chip.textContent = p.name;
+        wrap.appendChild(chip);
+    });
+}
+
+function hubName() {
+    return (localStorage.getItem("batorHubName") || "").trim() ||
+        "Gooner " + Math.floor(Math.random() * 900 + 100);
+}
+
 async function connectToHub() {
     try {
         hub = new P2PRoom({ prefix: "hub", requireMedia: false });
         hub.onHubRoster = (roster) => {
             document.getElementById("onlineCount").textContent = roster.length;
+            renderOnlineNames(roster);
         };
         hub.onDirectory = renderRooms;
         hub.onError = (err) => console.warn("[hub]", err.message);
-        await hub.connectHub();
+        await hub.connectHub(hubName());
     } catch (err) {
         console.warn("[hub] presence unavailable:", err.message);
         document.getElementById("onlineCount").textContent = "?";
@@ -74,4 +91,21 @@ function escapeHtml(str) {
     return el.innerHTML;
 }
 
-document.addEventListener("DOMContentLoaded", connectToHub);
+document.addEventListener("DOMContentLoaded", () => {
+    // Nickname (remembered on this device, shown in the online list)
+    const saved = localStorage.getItem("batorHubName") || "";
+    const input = document.getElementById("hubNameInput");
+    if (saved) input.value = saved;
+
+    document.getElementById("hubNameSave").addEventListener("click", () => {
+        localStorage.setItem("batorHubName", input.value.trim());
+        // reconnect so the new name shows up for everyone
+        if (hub) {
+            try { hub.destroy(); } catch (_) {}
+            hub = null;
+        }
+        connectToHub();
+    });
+
+    connectToHub();
+});
