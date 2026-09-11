@@ -77,13 +77,37 @@ function hubName() {
     if (!name) { name = 'Guest ' + Math.floor(Math.random() * 900 + 100); localStorage.setItem('batorHubName', name); }
     return name;
 }
+let hubChat = null;
+
+function mountHubChat(connection) {
+    const root = document.getElementById("chatRoot");
+    if (!root) return;
+    if (!hubChat || !root.querySelector(".chat-panel, .chat-fab")) {
+        hubChat = mountChatUI(root, {
+            selfName: hubName(),
+            onSend: (text) => {
+                if (hub !== connection || !hub) return;
+                hub.sendAll({ type: "chat", name: hubName(), text });
+                hubChat.addMessage({ name: hubName(), text, self: true });
+            }
+        });
+        hubChat.addMessage({ name: "", text: "👋 Clubhouse chat — coordinate games here", system: true });
+    }
+    connection.onAnyMessage = (_peerId, msg) => {
+        if (msg && msg.type === "chat") hubChat.addMessage({ name: msg.name, text: msg.text });
+    };
+}
+
 async function connectToHub() {
     const connection = new P2PRoom({ prefix:'hub', requireMedia:false }); hub = connection;
-    connection.onHubRoster = roster => { if (hub !== connection) return; setConnection('connected'); hubRoster = roster; renderPeople(); };
+    connection.onHubRoster = roster => { if (hub !== connection) return; setConnection('connected'); hubRoster = roster; renderPeople(); mountHubChat(connection); };
     connection.onDirectory = rooms => { if (hub === connection) renderRooms(rooms); };
     connection.onHubStatus = status => { if (hub === connection) setConnection(status); };
     connection.onError = err => { if (hub !== connection) return; console.warn('[hub]',err.message); setConnection('reconnecting'); };
-    try { await connection.connectHub(hubName()); }
+    try {
+        await connection.connectHub(hubName());
+        mountHubChat(connection);
+    }
     catch (err) { if (hub !== connection) return; connection.onError(err); connection._scheduleHubReconnect(hubName()); }
 }
 document.addEventListener('DOMContentLoaded', () => {
