@@ -1,0 +1,4 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const vm=require('node:vm');const fs=require('node:fs');
+const context=vm.createContext({document:{addEventListener:()=>{}}});vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../landing.js'),'utf8'),context);
+test('public membership deduplicates host presence and keeps join destinations',()=>{const room={prefix:'wheel',code:'abc123',hubPeerId:'hub1',members:[{id:'game1',name:'Host'},{id:'game2',name:'Guest'}]};const people=context.publicPeople([{id:'hub1',name:'Host'},{id:'hub2',name:'Visitor'}],[room]);assert.equal(people.length,3);assert.equal(people.find(p=>p.name==='Guest').room.code,'abc123');assert.equal(people.find(p=>p.name==='Visitor').room,undefined);});
+test('legacy rooms without membership do not remove hub visitors',()=>{assert.equal(context.publicPeople([{id:'hub1',name:'Host'}],[{prefix:'wheel',code:'abc123'}]).length,1);});

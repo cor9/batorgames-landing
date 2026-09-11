@@ -1,116 +1,98 @@
-/* ============================================================
-   Bator Games hub — presence counter + live room directory
-   Rides the global "hub" presence room (p2p.js). No accounts,
-   no server: whoever opens the hub first hosts the directory.
-   ============================================================ */
-
+/* Public clubhouse presence and directory. Room membership comes from host beacons. */
 const GAME_META = {
-    bate:   { icon: "🃏", name: "BateCards",        url: "https://batecards.batorgames.site" },
-    dice:   { icon: "🎲", name: "DiceDare",          url: "https://dicedare.batorgames.site" },
-    flesh:  { icon: "🔥", name: "Fleshlight Battle", url: "https://fleshlightbattle.batorgames.site" },
-    wheel:  { icon: "🎡", name: "Dare Wheel",        url: "https://darewheel.batorgames.site" },
-    lounge: { icon: "🛋️", name: "Gooner Lounge",     url: "https://lounge.batorgames.site" }
+    bate: { name: 'BateCards', url: 'https://batecards.batorgames.site' },
+    dice: { name: 'DiceDare', url: 'https://dicedare.batorgames.site' },
+    flesh: { name: 'Fleshlight Battle', url: 'https://fleshlightbattle.batorgames.site' },
+    wheel: { name: 'Dare Wheel', url: 'https://darewheel.batorgames.site' },
+    lounge: { name: 'Gooner Lounge', url: 'https://lounge.batorgames.site' }
 };
-
-let hub = null;
-
-function renderOnlineNames(roster) {
-    const wrap = document.getElementById("onlineNames");
-    wrap.innerHTML = "";
-    roster.forEach((p) => {
-        const chip = document.createElement("span");
-        chip.className = "online-chip";
-        chip.textContent = p.name;
-        wrap.appendChild(chip);
+let hub = null, hubRoster = [], publicRooms = [], connected = false;
+const $ = id => document.getElementById(id);
+const roomUrl = room => `${GAME_META[room.prefix].url}#join=${encodeURIComponent(room.code)}`;
+const roomFull = room => room.maxPlayers && room.players >= room.maxPlayers;
+function textEl(tag, className, text) {
+    const el = document.createElement(tag); el.className = className; el.textContent = text; return el;
+}
+function publicPeople(roster, rooms) {
+    const people = new Map();
+    const hostHubIds = new Set(rooms.map(r => r.hubPeerId).filter(Boolean));
+    roster.forEach(p => { if (!hostHubIds.has(p.id)) people.set(p.id, { ...p }); });
+    rooms.forEach(room => {
+        const members = Array.isArray(room.members) ? room.members : [];
+        members.forEach(p => { if (p && typeof p.id === 'string' && typeof p.name === 'string') people.set(p.id, { id:p.id, name:p.name, room }); });
     });
+    return [...people.values()];
 }
-
-function hubName() {
-    return (localStorage.getItem("batorHubName") || "").trim() ||
-        "Gooner " + Math.floor(Math.random() * 900 + 100);
-}
-
-async function connectToHub() {
-    try {
-        hub = new P2PRoom({ prefix: "hub", requireMedia: false });
-        hub.onHubRoster = (roster) => {
-            document.getElementById("onlineCount").textContent = roster.length;
-            renderOnlineNames(roster);
-        };
-        hub.onDirectory = renderRooms;
-        hub.onError = (err) => {
-            console.warn("[hub]", err.message);
-            document.getElementById("onlineCount").textContent = "—";
-            document.getElementById("liveEmpty").textContent = "Reconnecting to the hub… You can still open any game below.";
-        };
-        await hub.connectHub(hubName());
-    } catch (err) {
-        console.warn("[hub] presence unavailable:", err.message);
-        document.getElementById("onlineCount").textContent = "?";
-        document.getElementById("liveEmpty").textContent = "Hub connection interrupted — retrying automatically. You can still open any game below.";
-        if (hub) hub._scheduleHubReconnect(hubName());
-    }
-}
-
-function renderRooms(rooms) {
-    const wrap = document.getElementById("liveRooms");
-    const visible = (rooms || []).filter((r) => GAME_META[r.prefix] && (r.players || 0) > 0);
-
-    wrap.querySelectorAll(".live-room").forEach((el) => el.remove());
-
-    if (!visible.length) {
-        document.getElementById("liveEmpty").style.display = "";
-        const count = document.getElementById("onlineCount").textContent;
-        document.getElementById("liveEmpty").textContent =
-            count === "—"
-                ? "Connecting to the hub… (can take up to a minute on busy days)"
-                : "No open rooms right now — start any game with no password and it appears here.";
-        return;
-    }
-
-    document.getElementById("liveEmpty").style.display = "none";
-
-    visible.forEach((room) => {
-        const meta = GAME_META[room.prefix];
-        const card = document.createElement("a");
-        card.className = "live-room";
-        card.href = `${meta.url}#join=${room.code}`;
-        const count = room.maxPlayers
-            ? `${room.players}/${room.maxPlayers} bros`
-            : `${room.players} bro${room.players === 1 ? "" : "s"}`;
-        card.innerHTML = `
-            <span class="live-room-icon">${meta.icon}</span>
-            <span class="live-room-body">
-                <span class="live-room-name">${escapeHtml(room.title || meta.name)}</span>
-                <span class="live-room-count">👥 ${count}${room.locked ? " · 🔒" : ""}</span>
-            </span>
-            <span class="live-room-join">${room.locked ? "Join 🔑" : "Join →"}</span>
-        `;
-        wrap.appendChild(card);
-    });
-}
-
-function escapeHtml(str) {
-    const el = document.createElement("span");
-    el.textContent = str;
-    return el.innerHTML;
-}
-
-document.addEventListener("DOMContentLoaded", () => {
-    // Nickname (remembered on this device, shown in the online list)
-    const saved = localStorage.getItem("batorHubName") || "";
-    const input = document.getElementById("hubNameInput");
-    if (saved) input.value = saved;
-
-    document.getElementById("hubNameSave").addEventListener("click", () => {
-        localStorage.setItem("batorHubName", input.value.trim());
-        // reconnect so the new name shows up for everyone
-        if (hub) {
-            try { hub.destroy(); } catch (_) {}
-            hub = null;
+function renderPeople() {
+    const people = publicPeople(hubRoster, publicRooms);
+    $('onlineCount').textContent = connected ? people.length : '—';
+    $('onlineNames').replaceChildren();
+    if (!people.length) $('onlineNames').append(textEl('p', 'muted', connected ? 'The clubhouse is quiet. Make yourself at home.' : 'Checking who’s around…'));
+    people.forEach(p => {
+        const row = textEl('div', 'online-person', '');
+        row.append(textEl('span', 'avatar', p.name.trim().slice(0, 2).toUpperCase() || '?'));
+        const info = textEl('div', 'person-info', '');
+        info.append(textEl('span', 'person-name', p.name));
+        info.append(textEl('span', 'person-location', p.room ? GAME_META[p.room.prefix].name : 'In the clubhouse'));
+        row.append(info);
+        if (p.room && !roomFull(p.room)) {
+            const link = textEl('a', 'person-join', 'Join ↗'); link.href = roomUrl(p.room);
+            link.setAttribute('aria-label', `Join ${p.name} in ${GAME_META[p.room.prefix].name}`); row.append(link);
         }
-        connectToHub();
+        $('onlineNames').append(row);
     });
-
+}
+function renderRooms(rooms) {
+    publicRooms = (rooms || []).filter(r => GAME_META[r.prefix] && /^[a-z0-9]{6}$/i.test(r.code) && r.players > 0 && !r.locked);
+    $('roomCount').textContent = publicRooms.length ? `(${publicRooms.length})` : '';
+    $('liveRooms').querySelectorAll('.live-room').forEach(el => el.remove());
+    $('liveEmpty').hidden = publicRooms.length > 0;
+    if (!publicRooms.length) {
+        $('emptyTitle').textContent = connected ? 'First one in? Set the mood.' : 'Finding your people…';
+        $('emptyMessage').textContent = connected ? 'No public rooms yet. Open a game and host a room with no password. Your crew can join you here.' : 'The room directory is connecting. You can open a game while we look.';
+    }
+    publicRooms.forEach(room => {
+        const meta = GAME_META[room.prefix], full = roomFull(room);
+        const card = textEl(full ? 'div' : 'a', 'live-room' + (full ? ' full' : ''), '');
+        if (!full) { card.href = roomUrl(room); card.setAttribute('aria-label', `Join ${room.hostName || meta.name}’s room`); }
+        const icon = document.createElement('img'); icon.className = 'live-room-icon'; icon.src = `assets/${room.prefix}.svg`; icon.alt = '';
+        const body = textEl('span', 'live-room-body', '');
+        body.append(textEl('span', 'live-room-name', room.title || meta.name));
+        body.append(textEl('span', 'live-room-count', `${room.hostName ? `Hosted by ${room.hostName} · ` : ''}${room.players}${room.maxPlayers ? '/' + room.maxPlayers : ''} online`));
+        const names = (Array.isArray(room.members) ? room.members : []).filter(p => p && typeof p.name === 'string').map(p => p.name);
+        if (names.length) body.append(textEl('span', 'live-room-members', names.join(' · ')));
+        card.append(icon, body, textEl('span', 'live-room-join', full ? 'Room full' : 'Join room ↗'));
+        $('liveRooms').append(card);
+    });
+    renderPeople();
+}
+function setConnection(status) {
+    connected = status === 'connected';
+    $('hubStatus').textContent = connected ? '● Clubhouse live' : '↻ Reconnecting…';
+    $('hubStatus').classList.toggle('connected', connected);
+    if (!connected) { hubRoster = []; renderRooms([]); }
+}
+function hubName() {
+    let name = (localStorage.getItem('batorHubName') || '').trim();
+    if (!name) { name = 'Guest ' + Math.floor(Math.random() * 900 + 100); localStorage.setItem('batorHubName', name); }
+    return name;
+}
+async function connectToHub() {
+    const connection = new P2PRoom({ prefix:'hub', requireMedia:false }); hub = connection;
+    connection.onHubRoster = roster => { if (hub !== connection) return; setConnection('connected'); hubRoster = roster; renderPeople(); };
+    connection.onDirectory = rooms => { if (hub === connection) renderRooms(rooms); };
+    connection.onHubStatus = status => { if (hub === connection) setConnection(status); };
+    connection.onError = err => { if (hub !== connection) return; console.warn('[hub]',err.message); setConnection('reconnecting'); };
+    try { await connection.connectHub(hubName()); }
+    catch (err) { if (hub !== connection) return; connection.onError(err); connection._scheduleHubReconnect(hubName()); }
+}
+document.addEventListener('DOMContentLoaded', () => {
+    $('hubNameInput').value = hubName();
+    $('hubNameForm').addEventListener('submit', event => {
+        event.preventDefault(); const name = $('hubNameInput').value.trim();
+        if (!name) { $('nameStatus').textContent = 'Enter a nickname first.'; $('hubNameInput').focus(); return; }
+        localStorage.setItem('batorHubName', name); $('nameStatus').textContent = 'Saved. Updating your clubhouse name…';
+        const previous = hub; hub = null; if (previous) previous.destroy(); setConnection('reconnecting'); connectToHub();
+    });
     connectToHub();
 });
