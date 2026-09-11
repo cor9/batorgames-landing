@@ -38,7 +38,11 @@ function renderRooms(rooms) {
 
     if (!visible.length) {
         document.getElementById("liveEmpty").style.display = "";
-        document.getElementById("liveEmpty").textContent = "No open rooms right now — start any game with no password and it appears here.";
+        const count = document.getElementById("onlineCount").textContent;
+        document.getElementById("liveEmpty").textContent =
+            count === "—"
+                ? "Connecting to the hub… (can take up to a minute on busy days)"
+                : "No open rooms right now — start any game with no password and it appears here.";
         return;
     }
 
