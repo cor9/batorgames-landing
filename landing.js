@@ -38,12 +38,17 @@ async function connectToHub() {
             renderOnlineNames(roster);
         };
         hub.onDirectory = renderRooms;
-        hub.onError = (err) => console.warn("[hub]", err.message);
+        hub.onError = (err) => {
+            console.warn("[hub]", err.message);
+            document.getElementById("onlineCount").textContent = "—";
+            document.getElementById("liveEmpty").textContent = "Reconnecting to the hub… You can still open any game below.";
+        };
         await hub.connectHub(hubName());
     } catch (err) {
         console.warn("[hub] presence unavailable:", err.message);
         document.getElementById("onlineCount").textContent = "?";
-        document.getElementById("liveEmpty").textContent = "Presence is warming up — reload in a moment.";
+        document.getElementById("liveEmpty").textContent = "Hub connection interrupted — retrying automatically. You can still open any game below.";
+        if (hub) hub._scheduleHubReconnect(hubName());
     }
 }
 
