@@ -17,32 +17,10 @@ async function pollDirectory() {
         if (!res.ok) return;
         const body = await res.json();
         publicRooms = Array.isArray(body.rooms) ? body.rooms : [];
-        renderPeople();
-        renderRoomCards(publicRooms);
+        renderRooms(publicRooms);
     } catch (_) { /* token service asleep — next tick */ }
 }
 
-function renderRoomCards(rooms) {
-    const wrap = $('liveRooms');
-    if (!wrap) return;
-    wrap.querySelectorAll('.live-room').forEach((n) => n.remove());
-    const visible = (rooms || []).filter((r) => GAME_META[r.prefix] && (r.players || 0) > 0);
-    const empty = $('liveEmpty');
-    if (!visible.length) {
-        if (empty) empty.style.display = '';
-        return;
-    }
-    if (empty) empty.style.display = 'none';
-    visible.forEach((room) => {
-        const meta = GAME_META[room.prefix];
-        const card = document.createElement('a');
-        card.className = 'live-room';
-        card.href = roomUrl(room);
-        const count = room.maxPlayers ? `${room.players}/${room.maxPlayers}` : `${room.players} bros`;
-        card.innerHTML = `<span>${meta.name}</span><span>${count}${room.locked ? ' · 🔒' : ''}</span><b>Join room ↗</b>`;
-        wrap.appendChild(card);
-    });
-}
 const $ = id => document.getElementById(id);
 const roomUrl = room => `${GAME_META[room.prefix].url}#join=${encodeURIComponent(room.code)}`;
 const roomFull = room => room.maxPlayers && room.players >= room.maxPlayers;
@@ -106,7 +84,8 @@ function setConnection(status) {
     connected = status === 'connected';
     $('hubStatus').textContent = connected ? '● Clubhouse live' : '↻ Reconnecting…';
     $('hubStatus').classList.toggle('connected', connected);
-    if (!connected) { hubRoster = []; renderRooms([]); }
+    // Rooms come from the HTTP directory — hub hiccups must not clear them.
+    if (!connected) { hubRoster = []; renderPeople(); }
 }
 function hubName() {
     let name = (localStorage.getItem('batorHubName') || '').trim();
@@ -137,7 +116,9 @@ function mountHubChat(connection) {
 async function connectToHub() {
     const connection = new P2PRoom({ prefix:'hub', requireMedia:false }); hub = connection;
     connection.onHubRoster = roster => { if (hub !== connection) return; setConnection('connected'); hubRoster = roster; renderPeople(); mountHubChat(connection); };
-    connection.onDirectory = rooms => { if (hub === connection) renderRooms(rooms); };
+    // Room list comes ONLY from the HTTP directory (pollDirectory) — the hub
+    // mesh directory is legacy and would overwrite good data with stale/empty.
+    connection.onDirectory = () => {};
     connection.onHubStatus = status => { if (hub === connection) setConnection(status); };
     connection.onError = err => { if (hub !== connection) return; console.warn('[hub]',err.message); setConnection('reconnecting'); };
     try {
