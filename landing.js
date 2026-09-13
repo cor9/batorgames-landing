@@ -7,6 +7,42 @@ const GAME_META = {
     lounge: { name: 'Gooner Lounge', url: 'https://lounge.batorgames.site' }
 };
 let hub = null, hubRoster = [], publicRooms = [], connected = false;
+
+const DIRECTORY_URL = "https://livekit-token-dnuo.onrender.com";
+
+// Poll the always-on HTTP directory — the single source of truth for open rooms.
+async function pollDirectory() {
+    try {
+        const res = await fetch(DIRECTORY_URL + "/rooms");
+        if (!res.ok) return;
+        const body = await res.json();
+        publicRooms = Array.isArray(body.rooms) ? body.rooms : [];
+        renderPeople();
+        renderRoomCards(publicRooms);
+    } catch (_) { /* token service asleep — next tick */ }
+}
+
+function renderRoomCards(rooms) {
+    const wrap = $('liveRooms');
+    if (!wrap) return;
+    wrap.querySelectorAll('.live-room').forEach((n) => n.remove());
+    const visible = (rooms || []).filter((r) => GAME_META[r.prefix] && (r.players || 0) > 0);
+    const empty = $('liveEmpty');
+    if (!visible.length) {
+        if (empty) empty.style.display = '';
+        return;
+    }
+    if (empty) empty.style.display = 'none';
+    visible.forEach((room) => {
+        const meta = GAME_META[room.prefix];
+        const card = document.createElement('a');
+        card.className = 'live-room';
+        card.href = roomUrl(room);
+        const count = room.maxPlayers ? `${room.players}/${room.maxPlayers}` : `${room.players} bros`;
+        card.innerHTML = `<span>${meta.name}</span><span>${count}${room.locked ? ' · 🔒' : ''}</span><b>Join room ↗</b>`;
+        wrap.appendChild(card);
+    });
+}
 const $ = id => document.getElementById(id);
 const roomUrl = room => `${GAME_META[room.prefix].url}#join=${encodeURIComponent(room.code)}`;
 const roomFull = room => room.maxPlayers && room.players >= room.maxPlayers;
@@ -111,6 +147,8 @@ async function connectToHub() {
     catch (err) { if (hub !== connection) return; connection.onError(err); connection._scheduleHubReconnect(hubName()); }
 }
 document.addEventListener('DOMContentLoaded', () => {
+    pollDirectory();
+    setInterval(pollDirectory, 10000);
     $('hubNameInput').value = hubName();
     $('hubNameForm').addEventListener('submit', event => {
         event.preventDefault(); const name = $('hubNameInput').value.trim();
